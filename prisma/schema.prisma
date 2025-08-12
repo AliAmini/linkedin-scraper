@@ -1,0 +1,73 @@
+// datasource and generator
+ datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Enums
+enum CompanySize {
+  RANGE_1_10
+  RANGE_11_50
+  RANGE_51_200
+  RANGE_201_500
+  RANGE_501_1000
+  RANGE_1001_5000
+  RANGE_5001_10000
+  RANGE_10001_PLUS
+  UNKNOWN
+}
+
+enum ConnectionStatus {
+  NONE
+  PENDING
+  CONNECTED
+  FAILED
+}
+
+model Company {
+  id           Int          @id @default(autoincrement())
+  name         String
+  linkedinUrl  String?      @unique
+  description  String?      @db.Text
+  size         CompanySize  @default(UNKNOWN)
+  sizeLabel    String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  experiences  Experience[]
+}
+
+model Person {
+  id             Int               @id @default(autoincrement())
+  fullName       String
+  headline       String?
+  country        String?
+  profileUrl     String            @unique
+  connectionNote String?
+  connectionStatus ConnectionStatus @default(NONE)
+  connectedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  experiences    Experience[]
+}
+
+model Experience {
+  id           Int       @id @default(autoincrement())
+  person       Person    @relation(fields: [personId], references: [id])
+  personId     Int
+  company      Company?  @relation(fields: [companyId], references: [id])
+  companyId    Int?
+  companyName  String
+  companyUrl   String?
+  title        String?
+  startDate    DateTime?
+  endDate      DateTime?
+  isCurrent    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  @@index([personId])
+  @@index([companyId])
+} 
