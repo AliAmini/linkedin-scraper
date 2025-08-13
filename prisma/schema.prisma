@@ -38,6 +38,7 @@ model Company {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   experiences  Experience[]
+  people       PersonCompany[]
 }
 
 model Person {
@@ -52,6 +53,20 @@ model Person {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   experiences    Experience[]
+  companies      PersonCompany[]
+}
+
+model PersonCompany {
+  id        Int      @id @default(autoincrement())
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId  Int
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId Int
+  createdAt DateTime @default(now())
+
+  @@unique([personId, companyId])
+  @@index([personId])
+  @@index([companyId])
 }
 
 model Experience {
