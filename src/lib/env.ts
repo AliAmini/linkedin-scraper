@@ -24,4 +24,5 @@ export const env = {
     .map((s) => s.trim())
     .filter(Boolean),
   scrapeConcurrency: parseInt(process.env.SCRAPE_CONCURRENCY || '3', 10),
+  headless: process.env.HEADLESS_BROWSER === 'true'
 }; 
