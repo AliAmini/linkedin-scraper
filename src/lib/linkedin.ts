@@ -1,18 +1,18 @@
-import { BrowserContext, Page } from 'playwright';
+import { Page } from 'playwright';
 import { env } from './env';
 
 export async function ensureLoggedIn(page: Page): Promise<void> {
   await page.goto('https://www.linkedin.com/feed/');
-  if (await page.locator('input#session_key').first().isVisible().catch(() => false)) {
+  const showingLoginForm = await page.locator('input[name=session_key]').first().isVisible().catch(() => false);
+  console.log('ensureLoggedIn, showingLoginForm', showingLoginForm)
+  if (showingLoginForm) {
     if (!env.linkedinEmail || !env.linkedinPassword) {
       throw new Error('Not logged in and LINKEDIN_EMAIL/PASSWORD not provided. Provide COOKIES_JSON or credentials.');
     }
-    await page.fill('input#session_key', env.linkedinEmail);
-    await page.fill('input#session_password', env.linkedinPassword);
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-      page.click('button[type="submit"]:has-text("Sign in")'),
-    ]);
+    await page.fill('input[name=session_key]', env.linkedinEmail);
+    await page.fill('input[name=session_password]', env.linkedinPassword);
+    await page.click('button[type="submit"]:has-text("Sign in")');
+    await page.waitForLoadState('domcontentloaded');
   }
 }
 
@@ -25,25 +25,29 @@ export async function searchPeople(page: Page, role: string, country: string): P
   await page.waitForLoadState('domcontentloaded');
   await page.click('input[placeholder="Search"]', { timeout: 10000 }).catch(() => {});
   await page.fill('input[placeholder="Search"]', role);
-  await Promise.all([
-    page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-    page.keyboard.press('Enter'),
-  ]);
+  await page.keyboard.press('Enter');
+  await page.waitForLoadState('domcontentloaded');
 
   // Switch to People tab
-  const peopleTab = page.locator('button[aria-label="People"]');
+  const peopleTab = page.locator('nav[aria-label="Search filters"] button:has-text("People")');
   if (await peopleTab.isVisible().catch(() => false)) {
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-      peopleTab.click(),
-    ]);
+    await peopleTab.click();
+    await page.waitForLoadState('domcontentloaded');
   }
 
   // Open All filters
   const allFilters = page.locator('button:has-text("All filters")');
   if (await allFilters.isVisible().catch(() => false)) {
     await allFilters.click();
+    
+    
     // Set Locations
+    const locationsButton = page.locator('nav[aria-label="Search filters"] button:has-text("Locations")'); 
+    if(await locationsButton.isVisible().catch(() => false)) {
+      await locationsButton.click();
+      await delay(500);
+    }
+
     const locationsInput = page.locator('input[placeholder="Add a location"]');
     if (await locationsInput.isVisible().catch(() => false)) {
       await locationsInput.fill(country);
@@ -51,18 +55,17 @@ export async function searchPeople(page: Page, role: string, country: string): P
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
     }
+    
     const showResults = page.locator('button:has-text("Show results")');
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-      showResults.click(),
-    ]);
+    await showResults.click();
+    await page.waitForLoadState('domcontentloaded');
   }
 
   // Infinite scroll to collect profile links
   const collected = new Set<string>();
   for (let i = 0; i < 10; i++) {
     const links = await page
-      .locator('a.app-aware-link[href*="/in/"]')
+      .locator('a[data-test-app-aware-link][href*="/in/"]')
       .evaluateAll((elements: Element[]) => elements.map((el) => (el as HTMLAnchorElement).href));
     links.forEach((l: string) => collected.add(l.split('?')[0]));
     await page.mouse.wheel(0, 2000);
