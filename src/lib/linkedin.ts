@@ -2,7 +2,7 @@ import { Page } from 'playwright';
 import { waitForClickable, waitForElement } from './elements.helper';
 import { delay } from './functions.helper';
 
-export async function searchPeople(page: Page, role: string, country: string): Promise<string[]> {
+export async function searchPeople(page: Page, role: string, country: string, maxPages: number = 100): Promise<string[]> {
   await page.goto('https://www.linkedin.com/feed/');
   await page.waitForLoadState('domcontentloaded');
   
@@ -34,18 +34,101 @@ export async function searchPeople(page: Page, role: string, country: string): P
   await page.click('button:has-text("Show results")');
   await page.waitForLoadState('domcontentloaded');
 
-  // Infinite scroll to collect profile links
+  // Collect profile links from multiple pages
   const collected = new Set<string>();
-  for (let i = 0; i < 10; i++) {
+  let currentPage = 1;
+  
+  while (currentPage <= maxPages) {
+    console.log(`Scraping page ${currentPage}...`);
+    
+    // Wait for results to load
+    await delay(2000);
+    
+    // Collect profile links from current page
     const links = await page
       .locator('a[data-test-app-aware-link][href*="/in/"]')
       .evaluateAll((elements: Element[]) => elements.map((el) => (el as HTMLAnchorElement).href));
-    links.forEach((l: string) => collected.add(l.split('?')[0]));
-    await page.mouse.wheel(0, 2000);
-    await delay(800);
+    
+    const newLinks = links.filter((l: string) => !collected.has(l.split('?')[0]));
+    newLinks.forEach((l: string) => collected.add(l.split('?')[0]));
+    
+    console.log(`Found ${newLinks.length} new profiles on page ${currentPage} (total: ${collected.size})`);
+    
+    // Check if there's a next page
+    const hasNextPage = await hasNextPageAvailable(page);
+    if (!hasNextPage) {
+      console.log('No more pages available, stopping pagination');
+      break;
+    }
+    
+    // Click next page
+    await clickNextPage(page);
+    currentPage++;
+    
+    // Add delay between pages to avoid rate limiting
+    await delay(3000);
   }
 
   return Array.from(collected);
+}
+
+async function hasNextPageAvailable(page: Page): Promise<boolean> {
+  try {
+    // Look for next button - LinkedIn typically uses "Next" or arrow buttons
+    const nextButton = page.locator('button[aria-label="Next"]').first();
+    const nextButtonAlt = page.locator('button:has-text("Next")').first();
+    const arrowButton = page.locator('button[aria-label*="Next"]').first();
+    
+    // Check if any of these buttons exist and are enabled
+    const nextExists = await nextButton.isVisible().catch(() => false);
+    const nextAltExists = await nextButtonAlt.isVisible().catch(() => false);
+    const arrowExists = await arrowButton.isVisible().catch(() => false);
+    
+    if (nextExists) {
+      const disabled = await nextButton.getAttribute('disabled').catch(() => null);
+      return disabled === null;
+    }
+    if (nextAltExists) {
+      const disabled = await nextButtonAlt.getAttribute('disabled').catch(() => null);
+      return disabled === null;
+    }
+    if (arrowExists) {
+      const disabled = await arrowButton.getAttribute('disabled').catch(() => null);
+      return disabled === null;
+    }
+    
+    return false;
+  } catch (error) {
+    console.warn('Error checking for next page:', error);
+    return false;
+  }
+}
+
+async function clickNextPage(page: Page): Promise<boolean> {
+  try {
+    // Try different selectors for the next button
+    const nextButton = page.locator('button[aria-label="Next"]').first();
+    const nextButtonAlt = page.locator('button:has-text("Next")').first();
+    const arrowButton = page.locator('button[aria-label*="Next"]').first();
+    
+    if (await nextButton.isVisible().catch(() => false)) {
+      await nextButton.click();
+      return true;
+    }
+    if (await nextButtonAlt.isVisible().catch(() => false)) {
+      await nextButtonAlt.click();
+      return true;
+    }
+    if (await arrowButton.isVisible().catch(() => false)) {
+      await arrowButton.click();
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.warn('Error clicking next page:', error);
+    return false;
+  }
 }
 
 export async function openProfileAndExtract(page: Page, profileUrl: string): Promise<{

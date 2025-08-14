@@ -22,7 +22,7 @@ Stack: Node.js, TypeScript, Prisma, MySQL, Playwright.
 
 ## Jobs
 
-- Search people by roles and countries, and store latest experience:
+- Search people by role and country with pagination, and store latest experience:
   ```bash
   npm run scrape:people
   ```
@@ -35,4 +35,4 @@ Stack: Node.js, TypeScript, Prisma, MySQL, Playwright.
   npm run connect
   ```
 
-Configure `SEARCH_COUNTRIES`, `SEARCH_ROLES`, and either `COOKIES_JSON` or `LINKEDIN_EMAIL`/`LINKEDIN_PASSWORD` in `.env`. 
+Configure `SEARCH_COUNTRY`, `SEARCH_ROLE`, `MAX_PAGES_TO_SCRAPE`, and either `COOKIES_JSON` or `LINKEDIN_EMAIL`/`LINKEDIN_PASSWORD` in `.env`. The scraper will automatically paginate through search results until no more pages are available or the maximum page limit is reached. 

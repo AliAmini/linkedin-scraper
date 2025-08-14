@@ -1,7 +1,8 @@
 import { Browser, BrowserContext } from 'playwright';
 import { getPrisma } from '../lib/db';
 import { env } from '../lib/env';
-import { ensureLoggedIn, mapSizeLabelToEnum, openCompanyAndExtract } from '../lib/linkedin';
+import { ensureLoggedIn } from '../lib/scenarios';
+import { mapSizeLabelToEnum, openCompanyAndExtract } from '../lib/linkedin';
 import { launchBrowser, newLinkedInContext } from '../lib/browser';
 
 export async function fetchCompaniesJob(): Promise<void> {

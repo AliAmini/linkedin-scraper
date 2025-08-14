@@ -15,14 +15,9 @@ export const env = {
   linkedinEmail: process.env.LINKEDIN_EMAIL || '',
   linkedinPassword: process.env.LINKEDIN_PASSWORD || '',
   cookiesJson: process.env.COOKIES_JSON || '',
-  searchCountries: (process.env.SEARCH_COUNTRIES || 'Malaysia,Poland,Thailand,Ireland,Netherlands')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
-  searchRoles: (process.env.SEARCH_ROLES || 'CTO,Founder,Tech Lead')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
+  searchCountry: process.env.SEARCH_COUNTRY || 'United States',
+  searchRole: process.env.SEARCH_ROLE || 'Software Engineer',
+  maxPagesToScrape: parseInt(process.env.MAX_PAGES_TO_SCRAPE || '100', 10),
   scrapeConcurrency: parseInt(process.env.SCRAPE_CONCURRENCY || '3', 10),
   headless: process.env.HEADLESS_BROWSER === 'true'
 }; 

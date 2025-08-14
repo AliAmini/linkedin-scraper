@@ -1,6 +1,7 @@
 import { Browser, BrowserContext, Page } from 'playwright';
 import { getPrisma } from '../lib/db';
-import { ensureLoggedIn, delay } from '../lib/linkedin';
+import { ensureLoggedIn } from '../lib/scenarios';
+import { delay } from '../lib/functions.helper';
 import { launchBrowser, newLinkedInContext } from '../lib/browser';
 
 async function sendConnectionRequest(page: Page): Promise<'SENT' | 'ALREADY' | 'FAILED'> {
