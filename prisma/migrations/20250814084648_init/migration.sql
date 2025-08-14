@@ -31,19 +31,6 @@ CREATE TABLE `Person` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `PersonCompany` (
-    `id` INTEGER NOT NULL AUTO_INCREMENT,
-    `personId` INTEGER NOT NULL,
-    `companyId` INTEGER NOT NULL,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-
-    INDEX `PersonCompany_personId_idx`(`personId`),
-    INDEX `PersonCompany_companyId_idx`(`companyId`),
-    UNIQUE INDEX `PersonCompany_personId_companyId_key`(`personId`, `companyId`),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
 CREATE TABLE `Experience` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `personId` INTEGER NOT NULL,
@@ -51,8 +38,8 @@ CREATE TABLE `Experience` (
     `companyName` VARCHAR(191) NOT NULL,
     `companyUrl` VARCHAR(191) NULL,
     `title` VARCHAR(191) NULL,
-    `startDate` DATETIME(3) NULL,
-    `endDate` DATETIME(3) NULL,
+    `description` VARCHAR(191) NULL,
+    `duration` VARCHAR(191) NULL,
     `isCurrent` BOOLEAN NOT NULL DEFAULT false,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
@@ -60,12 +47,6 @@ CREATE TABLE `Experience` (
     INDEX `Experience_companyId_idx`(`companyId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- AddForeignKey
-ALTER TABLE `PersonCompany` ADD CONSTRAINT `PersonCompany_personId_fkey` FOREIGN KEY (`personId`) REFERENCES `Person`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `PersonCompany` ADD CONSTRAINT `PersonCompany_companyId_fkey` FOREIGN KEY (`companyId`) REFERENCES `Company`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Experience` ADD CONSTRAINT `Experience_personId_fkey` FOREIGN KEY (`personId`) REFERENCES `Person`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

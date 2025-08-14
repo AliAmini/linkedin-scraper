@@ -1,8 +1,16 @@
 import { Page } from 'playwright';
 import { waitForClickable, waitForElement } from './elements.helper';
 import { delay } from './functions.helper';
+import { PrismaClient } from '@prisma/client';
 
-export async function searchPeople(page: Page, role: string, country: string, maxPages: number = 100): Promise<string[]> {
+export async function searchPeopleAndProcess(
+  page: Page, 
+  context: any, 
+  prisma: PrismaClient,
+  role: string, 
+  country: string, 
+  maxPages: number = 100
+): Promise<number> {
   await page.goto('https://www.linkedin.com/feed/');
   await page.waitForLoadState('domcontentloaded');
   
@@ -36,8 +44,7 @@ export async function searchPeople(page: Page, role: string, country: string, ma
   await page.click(btnSelector);
   await page.waitForLoadState('domcontentloaded');
 
-  // Collect profile links from multiple pages
-  const collected = new Set<string>();
+  let totalProcessed = 0;
   let currentPage = 1;
   
   while (currentPage <= maxPages) {
@@ -45,16 +52,46 @@ export async function searchPeople(page: Page, role: string, country: string, ma
     
     // Wait for results to load
     await delay(2000);
+
+    // Scroll to the bottom to trigger any lazy loading/infinite scroll
+    let lastHeight = await page.evaluate(() => document.body.scrollHeight);
+    let scrollAttempts = 0;
+    const maxScrollAttempts = 5;
+    while (scrollAttempts < maxScrollAttempts) {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await delay(1500);
+      const newHeight = await page.evaluate(() => document.body.scrollHeight);
+      if (newHeight === lastHeight) {
+        // No more content loaded, break
+        break;
+      }
+      lastHeight = newHeight;
+      scrollAttempts++;
+    }
     
     // Collect profile links from current page
     const links = await page
       .locator('a[data-test-app-aware-link][href*="/in/"]')
       .evaluateAll((elements: Element[]) => elements.map((el) => (el as HTMLAnchorElement).href));
     
-    const newLinks = links.filter((l: string) => !collected.has(l.split('?')[0]));
-    newLinks.forEach((l: string) => collected.add(l.split('?')[0]));
+    // Remove query parameters and duplicates
+    const uniqueLinks = [...new Set(links.map((l: string) => l.split('?')[0]))];
     
-    console.log(`Found ${newLinks.length} new profiles on page ${currentPage} (total: ${collected.size})`);
+    console.log(`Found ${uniqueLinks.length} profiles on page ${currentPage}`);
+    
+    // Process each profile immediately
+    for (const profileUrl of uniqueLinks) {
+      try {
+        await processProfile(context, prisma, profileUrl);
+        totalProcessed++;
+        
+        if (totalProcessed % 5 === 0) {
+          console.log(`Processed ${totalProcessed} profiles so far...`);
+        }
+      } catch (err) {
+        console.warn('Failed processing profile:', profileUrl, err);
+      }
+    }
     
     // Check if there's a next page
     const hasNextPage = await hasNextPageAvailable(page);
@@ -71,31 +108,19 @@ export async function searchPeople(page: Page, role: string, country: string, ma
     await delay(3000);
   }
 
-  return Array.from(collected);
+  return totalProcessed;
 }
 
 async function hasNextPageAvailable(page: Page): Promise<boolean> {
   try {
     // Look for next button - LinkedIn typically uses "Next" or arrow buttons
     const nextButton = page.locator('button[aria-label="Next"]').first();
-    const nextButtonAlt = page.locator('button:has-text("Next")').first();
-    const arrowButton = page.locator('button[aria-label*="Next"]').first();
     
     // Check if any of these buttons exist and are enabled
     const nextExists = await nextButton.isVisible().catch(() => false);
-    const nextAltExists = await nextButtonAlt.isVisible().catch(() => false);
-    const arrowExists = await arrowButton.isVisible().catch(() => false);
     
     if (nextExists) {
       const disabled = await nextButton.getAttribute('disabled').catch(() => null);
-      return disabled === null;
-    }
-    if (nextAltExists) {
-      const disabled = await nextButtonAlt.getAttribute('disabled').catch(() => null);
-      return disabled === null;
-    }
-    if (arrowExists) {
-      const disabled = await arrowButton.getAttribute('disabled').catch(() => null);
       return disabled === null;
     }
     
@@ -140,35 +165,56 @@ export async function openProfileAndExtract(page: Page, profileUrl: string): Pro
   latestCompanyName?: string;
   latestCompanyUrl?: string;
   title?: string;
+  description?: string;
+  duration?: string;
 }> {
   await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
   await delay(1000);
 
+  console.log('start finding general person\'s info', profileUrl);
   const fullName = (await page.locator('section[data-member-id] h1').first().textContent().catch(() => ''))?.trim() || '';
   const headline = (await page.locator('section[data-member-id] div[data-generated-suggestion-target]').first().textContent().catch(() => ''))?.trim() || undefined;
   const country = (await page.locator('section[data-member-id] span.text-body-small.inline.t-black--light.break-words').first().textContent().catch(() => ''))?.trim() || undefined;
 
   // Experience section selectors may vary; try a few
   const firstExperienceSelector = 'div[data-view-name=profile-component-entity]';
+  console.log('start waiting for first experience');
   await waitForElement(page, firstExperienceSelector);
   const firstExperienceItem = page.locator(firstExperienceSelector).first();
   let latestCompanyName: string | undefined;
   let latestCompanyUrl: string | undefined;
   let title: string | undefined;
+  let description: string | undefined;
+  let duration: string | undefined;
 
+  console.log('Checking first experience is visible');
   if (await firstExperienceItem.isVisible().catch(() => false)) {
     const companyLink = firstExperienceItem.locator('a[href*="/company/"]').first();
 
+    console.log('start getting more info');
     latestCompanyUrl = (await companyLink.getAttribute('href').catch(() => null)) || undefined;
     if (latestCompanyUrl && latestCompanyUrl.startsWith('/')) {
       latestCompanyUrl = 'https://www.linkedin.com' + latestCompanyUrl;
     }
     const companyImage = companyLink.locator('img').first();
+    console.log('Extracting latestCompanyName');
     latestCompanyName = (await companyImage.getAttribute('alt').catch(() => null)) || undefined;
+
+    console.log('Extracting title');
     title = (await firstExperienceItem.locator('span[aria-hidden="true"]').first().textContent().catch(() => ''))?.trim() || undefined;
+
+    console.log('Extracting description');
+    // # Commented Because of making a lot of delay
+    // description = (await firstExperienceItem.locator('.pvs-entity__sub-components').first().textContent().catch(() => ''))?.trim() || undefined;
+
+    console.log('Extracting duration');
+    duration = (await firstExperienceItem.locator('.pvs-entity__caption-wrapper').first().textContent().catch(() => ''))?.trim() || undefined;
+    console.log('end of getting more info');
+  } else {
+    console.log('don\'t have more info');
   }
 
-  return { fullName, headline, country, latestCompanyName, latestCompanyUrl, title };
+  return { fullName, headline, country, latestCompanyName, latestCompanyUrl, title, description, duration };
 }
 
 export async function openCompanyAndExtract(page: Page, companyUrl: string): Promise<{
@@ -209,4 +255,93 @@ export function mapSizeLabelToEnum(sizeLabel?: string): 'RANGE_1_10' | 'RANGE_11
   if (label.includes('5,001-10,000') || label.includes('5001-10000')) return 'RANGE_5001_10000';
   if (label.includes('10,001+') || label.includes('10001+')) return 'RANGE_10001_PLUS';
   return 'UNKNOWN';
+}
+
+// Helper function to process a single profile
+async function processProfile(context: any, prisma: PrismaClient, profileUrl: string): Promise<void> {
+  const profilePage = await context.newPage();
+  try {
+    const data = await openProfileAndExtract(profilePage, profileUrl);
+    
+    if (!data.fullName) {
+      return;
+    }
+
+    // Upsert person
+    const person = await upsertPerson(prisma, profileUrl, data);
+    
+    // Handle company data if available
+    if (data.latestCompanyName) {
+      const companyId = await upsertCompany(prisma, data.latestCompanyName, data.latestCompanyUrl);
+      
+      // Create experience record
+      await createExperience(prisma, person.id, companyId, data);
+    }
+    
+    await delay(500);
+  } finally {
+    await profilePage.close();
+  }
+}
+
+// Helper function to upsert a person
+async function upsertPerson(prisma: PrismaClient, profileUrl: string, data: any) {
+  return await prisma.person.upsert({
+    where: { profileUrl },
+    update: {
+      fullName: data.fullName,
+      headline: data.headline,
+      country: data.country,
+    },
+    create: {
+      fullName: data.fullName,
+      headline: data.headline,
+      country: data.country,
+      profileUrl,
+    },
+  });
+}
+
+// Helper function to upsert a company
+async function upsertCompany(prisma: PrismaClient, companyName: string, companyUrl?: string): Promise<number> {
+  if (companyUrl) {
+    const existing = await prisma.company.findUnique({ where: { linkedinUrl: companyUrl } });
+    if (existing) {
+      const updated = await prisma.company.update({
+        where: { id: existing.id },
+        data: { name: companyName },
+      });
+      return updated.id;
+    } else {
+      const created = await prisma.company.create({
+        data: { name: companyName, linkedinUrl: companyUrl },
+      });
+      return created.id;
+    }
+  } else {
+    // No company URL; try find by name, else create without URL
+    const existingByName = await prisma.company.findFirst({ where: { name: companyName } });
+    if (existingByName) {
+      return existingByName.id;
+    } else {
+      const createdNoUrl = await prisma.company.create({ data: { name: companyName } });
+      return createdNoUrl.id;
+    }
+  }
+}
+
+// Helper function to create experience record
+async function createExperience(prisma: PrismaClient, personId: number, companyId: number, data: any): Promise<void> {
+  await prisma.experience.create({
+    data: {
+      personId: personId,
+      companyId: companyId,
+      companyName: data.latestCompanyName,
+      companyUrl: data.latestCompanyUrl,
+      title: data.title,
+      isCurrent: true,
+      description: data.description,
+      duration: data.duration
+    },
+  });
 } 
