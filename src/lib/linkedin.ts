@@ -1,65 +1,38 @@
 import { Page } from 'playwright';
-import { env } from './env';
-
-export async function ensureLoggedIn(page: Page): Promise<void> {
-  await page.goto('https://www.linkedin.com/feed/');
-  const showingLoginForm = await page.locator('input[name=session_key]').first().isVisible().catch(() => false);
-  console.log('ensureLoggedIn, showingLoginForm', showingLoginForm)
-  if (showingLoginForm) {
-    if (!env.linkedinEmail || !env.linkedinPassword) {
-      throw new Error('Not logged in and LINKEDIN_EMAIL/PASSWORD not provided. Provide COOKIES_JSON or credentials.');
-    }
-    await page.fill('input[name=session_key]', env.linkedinEmail);
-    await page.fill('input[name=session_password]', env.linkedinPassword);
-    await page.click('button[type="submit"]:has-text("Sign in")');
-    await page.waitForLoadState('domcontentloaded');
-  }
-}
-
-export async function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { waitForClickable, waitForElement } from './elements.helper';
+import { delay } from './functions.helper';
 
 export async function searchPeople(page: Page, role: string, country: string): Promise<string[]> {
   await page.goto('https://www.linkedin.com/feed/');
   await page.waitForLoadState('domcontentloaded');
-  await page.click('input[placeholder="Search"]', { timeout: 10000 }).catch(() => {});
+  
+  // Wait for search input to be available
+  await waitForElement(page, 'input[placeholder="Search"]', 10000);
+  await page.click('input[placeholder="Search"]');
   await page.fill('input[placeholder="Search"]', role);
   await page.keyboard.press('Enter');
   await page.waitForLoadState('domcontentloaded');
 
-  // Switch to People tab
-  const peopleTab = page.locator('nav[aria-label="Search filters"] button:has-text("People")');
-  if (await peopleTab.isVisible().catch(() => false)) {
-    await peopleTab.click();
-    await page.waitForLoadState('domcontentloaded');
-  }
+  // Wait for and click People tab
+  await waitForClickable(page, 'nav[aria-label="Search filters"] button:has-text("People")');
+  await page.click('nav[aria-label="Search filters"] button:has-text("People")');
+  await page.waitForLoadState('domcontentloaded');
 
-  // Open All filters
-  const allFilters = page.locator('button:has-text("All filters")');
-  if (await allFilters.isVisible().catch(() => false)) {
-    await allFilters.click();
-    
-    
-    // Set Locations
-    const locationsButton = page.locator('nav[aria-label="Search filters"] button:has-text("Locations")'); 
-    if(await locationsButton.isVisible().catch(() => false)) {
-      await locationsButton.click();
-      await delay(500);
-    }
+  // Wait for and click Locations button
+  await waitForClickable(page, 'nav[aria-label="Search filters"] button:has-text("Locations")');
+  await page.click('nav[aria-label="Search filters"] button:has-text("Locations")');
 
-    const locationsInput = page.locator('input[placeholder="Add a location"]');
-    if (await locationsInput.isVisible().catch(() => false)) {
-      await locationsInput.fill(country);
-      await delay(500);
-      await page.keyboard.press('ArrowDown');
-      await page.keyboard.press('Enter');
-    }
-    
-    const showResults = page.locator('button:has-text("Show results")');
-    await showResults.click();
-    await page.waitForLoadState('domcontentloaded');
-  }
+  // Wait for and fill location input
+  await waitForElement(page, 'input[placeholder="Add a location"]');
+  await page.fill('input[placeholder="Add a location"]', country);
+  await delay(3000); // Delay for dropdown to appear
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  
+  // Wait for and click Show results button
+  await waitForElement(page, 'button:has-text("Show results")');
+  await page.click('button:has-text("Show results")');
+  await page.waitForLoadState('domcontentloaded');
 
   // Infinite scroll to collect profile links
   const collected = new Set<string>();
@@ -86,28 +59,26 @@ export async function openProfileAndExtract(page: Page, profileUrl: string): Pro
   await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
   await delay(1000);
 
-  const fullName = (await page.locator('h1.text-heading-xlarge').first().textContent().catch(() => ''))?.trim() || '';
-  const headline = (await page.locator('div.text-body-medium.break-words').first().textContent().catch(() => ''))?.trim() || undefined;
-  const country = (await page.locator('span.text-body-small.inline.t-black--light.break-words').first().textContent().catch(() => ''))?.trim() || undefined;
+  const fullName = (await page.locator('section[data-member-id] h1').first().textContent().catch(() => ''))?.trim() || '';
+  const headline = (await page.locator('section[data-member-id] div[data-generated-suggestion-target]').first().textContent().catch(() => ''))?.trim() || undefined;
+  const country = (await page.locator('section[data-member-id] span.text-body-small.inline.t-black--light.break-words').first().textContent().catch(() => ''))?.trim() || undefined;
 
   // Experience section selectors may vary; try a few
-  const experienceSection = page.locator('section[id*="experience"]');
+  const firstExperienceItem = page.locator('div[data-view-name=profile-component-entity]').first();
   let latestCompanyName: string | undefined;
   let latestCompanyUrl: string | undefined;
   let title: string | undefined;
 
-  if (await experienceSection.isVisible().catch(() => false)) {
-    const firstItem = experienceSection.locator('li.artdeco-list__item').first();
-    const companyLink = firstItem.locator('a[href*="/company/"]').first();
+  if (await firstExperienceItem.isVisible().catch(() => false)) {
+    const companyLink = firstExperienceItem.locator('a[href*="/company/"]').first();
+
     latestCompanyUrl = (await companyLink.getAttribute('href').catch(() => null)) || undefined;
     if (latestCompanyUrl && latestCompanyUrl.startsWith('/')) {
       latestCompanyUrl = 'https://www.linkedin.com' + latestCompanyUrl;
     }
-    latestCompanyName = (await companyLink.textContent().catch(() => ''))?.trim() || undefined;
-    if (!latestCompanyName) {
-      latestCompanyName = (await firstItem.locator('span.t-14.t-normal').first().textContent().catch(() => ''))?.trim() || undefined;
-    }
-    title = (await firstItem.locator('span[aria-hidden="true"]').first().textContent().catch(() => ''))?.trim() || undefined;
+    const companyImage = companyLink.locator('img').first();
+    latestCompanyName = (await companyImage.getAttribute('alt').catch(() => null)) || undefined;
+    title = (await firstExperienceItem.locator('span[aria-hidden="true"]').first().textContent().catch(() => ''))?.trim() || undefined;
   }
 
   return { fullName, headline, country, latestCompanyName, latestCompanyUrl, title };

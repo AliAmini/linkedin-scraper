@@ -1,8 +1,10 @@
 import { Browser, BrowserContext } from 'playwright';
 import { getPrisma } from '../lib/db';
 import { env } from '../lib/env';
-import { delay, ensureLoggedIn, openProfileAndExtract, searchPeople } from '../lib/linkedin';
+import { openProfileAndExtract, searchPeople } from '../lib/linkedin';
 import { launchBrowser, newLinkedInContext } from '../lib/browser';
+import { ensureLoggedIn } from '../lib/scenarios';
+import { delay } from '../lib/functions.helper';
 
 export async function scrapePeopleJob(): Promise<void> {
   const prisma = getPrisma();

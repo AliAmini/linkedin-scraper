@@ -42,7 +42,7 @@ export async function launchBrowser(): Promise<Browser> {
       '--disable-features=AutofillServerCommunication',
       '--disable-features=AutofillShowTypePredictions',
       '--disable-features=AutofillShowManualFallbackForPasswordFields',
-    ]
+    ],
    });
   return browser;
 }
@@ -69,7 +69,7 @@ export async function newLinkedInContext(browser: Browser): Promise<BrowserConte
       console.warn('Failed to parse COOKIES_JSON, proceeding without cookies', err);
     }
   }
-
+  
   return context;
 }
 

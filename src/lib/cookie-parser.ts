@@ -81,7 +81,7 @@ export function convertToPlaywrightCookies(rawCookies: RawCookie[]): PlaywrightC
         domain: cookie.domain!, // We've filtered out null domains, so this is safe
         path: cookie.path,
         expires: expires,
-        httpOnly: false, // Default value since it's not in the raw data
+        httpOnly: true, // Default value since it's not in the raw data
         secure: cookie.secure,
         sameSite: (cookie.sameSite === 'none' ? 'None' : 
                    cookie.sameSite === 'lax' ? 'Lax' : 
