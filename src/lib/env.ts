@@ -19,5 +19,6 @@ export const env = {
   searchRole: process.env.SEARCH_ROLE || 'Software Engineer',
   maxPagesToScrape: parseInt(process.env.MAX_PAGES_TO_SCRAPE || '100', 10),
   scrapeConcurrency: parseInt(process.env.SCRAPE_CONCURRENCY || '3', 10),
-  headless: process.env.HEADLESS_BROWSER === 'true'
+  headless: process.env.HEADLESS_BROWSER === 'true',
+  useExistingChromeProfile: process.env.USE_EXISTING_CHROME_PROFILE !== 'false' // Default to true
 }; 
