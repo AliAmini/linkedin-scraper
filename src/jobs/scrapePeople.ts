@@ -2,14 +2,13 @@ import { Browser, BrowserContext } from 'playwright';
 import { getPrisma } from '../lib/db';
 import { env } from '../lib/env';
 import { openProfileAndExtract, searchPeople } from '../lib/linkedin';
-import { launchBrowser, newLinkedInContext } from '../lib/browser';
+import { launchBrowserWithContext } from '../lib/browser';
 import { ensureLoggedIn } from '../lib/scenarios';
 import { delay } from '../lib/functions.helper';
 
 export async function scrapePeopleJob(): Promise<void> {
   const prisma = getPrisma();
-  const browser: Browser = await launchBrowser();
-  const context: BrowserContext = await newLinkedInContext(browser);
+  const { browser, context } = await launchBrowserWithContext();
   const page = await context.newPage();
 
   try {

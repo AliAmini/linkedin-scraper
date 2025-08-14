@@ -7,7 +7,7 @@ export async function searchPeople(page: Page, role: string, country: string, ma
   await page.waitForLoadState('domcontentloaded');
   
   // Wait for search input to be available
-  await waitForElement(page, 'input[placeholder="Search"]', 10000);
+  await waitForElement(page, 'input[placeholder="Search"]');
   await page.click('input[placeholder="Search"]');
   await page.fill('input[placeholder="Search"]', role);
   await page.keyboard.press('Enter');
@@ -30,8 +30,10 @@ export async function searchPeople(page: Page, role: string, country: string, ma
   await page.keyboard.press('Enter');
   
   // Wait for and click Show results button
-  await waitForElement(page, 'button:has-text("Show results")');
-  await page.click('button:has-text("Show results")');
+  await delay(500);
+  const btnSelector = 'div[data-basic-filter-parameter-name="geoUrn"] button[aria-label="Apply current filter to show results"]';
+  await waitForElement(page, btnSelector);
+  await page.click(btnSelector);
   await page.waitForLoadState('domcontentloaded');
 
   // Collect profile links from multiple pages
@@ -147,7 +149,9 @@ export async function openProfileAndExtract(page: Page, profileUrl: string): Pro
   const country = (await page.locator('section[data-member-id] span.text-body-small.inline.t-black--light.break-words').first().textContent().catch(() => ''))?.trim() || undefined;
 
   // Experience section selectors may vary; try a few
-  const firstExperienceItem = page.locator('div[data-view-name=profile-component-entity]').first();
+  const firstExperienceSelector = 'div[data-view-name=profile-component-entity]';
+  await waitForElement(page, firstExperienceSelector);
+  const firstExperienceItem = page.locator(firstExperienceSelector).first();
   let latestCompanyName: string | undefined;
   let latestCompanyUrl: string | undefined;
   let title: string | undefined;
