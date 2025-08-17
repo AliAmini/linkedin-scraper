@@ -225,13 +225,8 @@ export async function openCompanyAndExtract(page: Page, companyUrl: string): Pro
   // Batch all company data extraction in one evaluate call
   const companyData = await page.evaluate(() => {
     const title = document.querySelector('h1')?.textContent?.trim();
-    
-    let description = document.querySelector('p.break-words.white-space-pre-wrap')?.textContent?.trim();
-    if (!description) {
-      description = document.querySelector('div.org-grid__core-rail--no-margin-left p')?.textContent?.trim();
-    }
-
-    const sizeLabel = document.querySelector('dt:has-text("Company size") + dd')?.textContent?.trim();
+    const description = document.querySelector('.org-about-module__description')?.textContent?.trim();
+    const sizeLabel = document.querySelector('.ember-view.org-top-card-summary-info-list__info-item span')?.textContent?.trim();
 
     return { title, description, sizeLabel };
   });
@@ -242,14 +237,14 @@ export async function openCompanyAndExtract(page: Page, companyUrl: string): Pro
 export function mapSizeLabelToEnum(sizeLabel?: string): 'RANGE_1_10' | 'RANGE_11_50' | 'RANGE_51_200' | 'RANGE_201_500' | 'RANGE_501_1000' | 'RANGE_1001_5000' | 'RANGE_5001_10000' | 'RANGE_10001_PLUS' | 'UNKNOWN' {
   if (!sizeLabel) return 'UNKNOWN';
   const label = sizeLabel.toLowerCase();
-  if (label.includes('1-10')) return 'RANGE_1_10';
+  if (label.includes('2-10')) return 'RANGE_1_10';
   if (label.includes('11-50')) return 'RANGE_11_50';
   if (label.includes('51-200')) return 'RANGE_51_200';
   if (label.includes('201-500')) return 'RANGE_201_500';
-  if (label.includes('501-1,000') || label.includes('501-1000')) return 'RANGE_501_1000';
-  if (label.includes('1,001-5,000') || label.includes('1001-5000')) return 'RANGE_1001_5000';
-  if (label.includes('5,001-10,000') || label.includes('5001-10000')) return 'RANGE_5001_10000';
-  if (label.includes('10,001+') || label.includes('10001+')) return 'RANGE_10001_PLUS';
+  if (label.includes('501-1K') || label.includes('501-1000')) return 'RANGE_501_1000';
+  if (label.includes('1K-5K') || label.includes('1001-5000')) return 'RANGE_1001_5000';
+  if (label.includes('5K-10K') || label.includes('5001-10000')) return 'RANGE_5001_10000';
+  if (label.includes('10K+') || label.includes('10001+')) return 'RANGE_10001_PLUS';
   return 'UNKNOWN';
 }
 

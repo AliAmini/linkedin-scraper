@@ -1,14 +1,11 @@
-import { Browser, BrowserContext } from 'playwright';
 import { getPrisma } from '../lib/db';
-import { env } from '../lib/env';
 import { ensureLoggedIn } from '../lib/scenarios';
 import { mapSizeLabelToEnum, openCompanyAndExtract } from '../lib/linkedin';
-import { launchBrowser, newLinkedInContext } from '../lib/browser';
+import {  launchBrowserWithContext } from '../lib/browser';
 
 export async function fetchCompaniesJob(): Promise<void> {
   const prisma = getPrisma();
-  const browser: Browser = await launchBrowser();
-  const context: BrowserContext = await newLinkedInContext(browser);
+  const { browser, context } = await launchBrowserWithContext();
   const page = await context.newPage();
 
   try {
