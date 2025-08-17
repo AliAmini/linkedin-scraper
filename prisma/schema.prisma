@@ -46,6 +46,8 @@ model Person {
   headline       String?
   country        String?
   profileUrl     String            @unique
+  searchingRole String
+  searchingCountry String
   connectionNote String?
   connectionStatus ConnectionStatus @default(NONE)
   connectedAt    DateTime?

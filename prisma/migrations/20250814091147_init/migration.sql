@@ -20,6 +20,8 @@ CREATE TABLE `Person` (
     `headline` VARCHAR(191) NULL,
     `country` VARCHAR(191) NULL,
     `profileUrl` VARCHAR(191) NOT NULL,
+    `searchingRole` VARCHAR(191) NOT NULL,
+    `searchingCountry` VARCHAR(191) NOT NULL,
     `connectionNote` VARCHAR(191) NULL,
     `connectionStatus` ENUM('NONE', 'PENDING', 'CONNECTED', 'FAILED') NOT NULL DEFAULT 'NONE',
     `connectedAt` DATETIME(3) NULL,

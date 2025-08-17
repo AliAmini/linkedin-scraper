@@ -33,12 +33,12 @@ export async function searchPeopleAndProcess(
   // Wait for and fill location input
   await waitForElement(page, 'input[placeholder="Add a location"]');
   await page.fill('input[placeholder="Add a location"]', country);
-  await delay(3000); // Delay for dropdown to appear
+  await delay(2000); // Reduced from 3000ms
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   
   // Wait for and click Show results button
-  await delay(500);
+  await delay(300); // Reduced from 500ms
   const btnSelector = 'div[data-basic-filter-parameter-name="geoUrn"] button[aria-label="Apply current filter to show results"]';
   await waitForElement(page, btnSelector);
   await page.click(btnSelector);
@@ -51,23 +51,11 @@ export async function searchPeopleAndProcess(
     console.log(`Scraping page ${currentPage}...`);
     
     // Wait for results to load
-    await delay(2000);
+    await delay(1000); // Reduced from 2000ms
 
-    // Scroll to the bottom to trigger any lazy loading/infinite scroll
-    let lastHeight = await page.evaluate(() => document.body.scrollHeight);
-    let scrollAttempts = 0;
-    const maxScrollAttempts = 5;
-    while (scrollAttempts < maxScrollAttempts) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await delay(1500);
-      const newHeight = await page.evaluate(() => document.body.scrollHeight);
-      if (newHeight === lastHeight) {
-        // No more content loaded, break
-        break;
-      }
-      lastHeight = newHeight;
-      scrollAttempts++;
-    }
+    // Optimized scrolling - use a single scroll to bottom with shorter delay
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await delay(800); // Reduced from 1500ms and single scroll instead of multiple
     
     // Collect profile links from current page
     const links = await page
@@ -82,7 +70,7 @@ export async function searchPeopleAndProcess(
     // Process each profile immediately
     for (const profileUrl of uniqueLinks) {
       try {
-        await processProfile(context, prisma, profileUrl);
+        await processProfile(context, prisma, profileUrl, role, country);
         totalProcessed++;
         
         if (totalProcessed % 5 === 0) {
@@ -105,7 +93,7 @@ export async function searchPeopleAndProcess(
     currentPage++;
     
     // Add delay between pages to avoid rate limiting
-    await delay(3000);
+    await delay(2000); // Reduced from 3000ms
   }
 
   return totalProcessed;
@@ -169,52 +157,57 @@ export async function openProfileAndExtract(page: Page, profileUrl: string): Pro
   duration?: string;
 }> {
   await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
-  await delay(1000);
+  await delay(500); // Reduced from 1000ms
 
   console.log('start finding general person\'s info', profileUrl);
-  const fullName = (await page.locator('section[data-member-id] h1').first().textContent().catch(() => ''))?.trim() || '';
-  const headline = (await page.locator('section[data-member-id] div[data-generated-suggestion-target]').first().textContent().catch(() => ''))?.trim() || undefined;
-  const country = (await page.locator('section[data-member-id] span.text-body-small.inline.t-black--light.break-words').first().textContent().catch(() => ''))?.trim() || undefined;
+  
+  // Batch all text extractions in parallel using evaluate
+  const profileData = await page.evaluate(() => {
+    const section = document.querySelector('section[data-member-id]');
+    if (!section) return { fullName: '', headline: undefined, country: undefined };
 
-  // Experience section selectors may vary; try a few
+    const fullName = section.querySelector('h1')?.textContent?.trim() || '';
+    const headline = section.querySelector('div[data-generated-suggestion-target]')?.textContent?.trim();
+    const country = section.querySelector('span.text-body-small.inline.t-black--light.break-words')?.textContent?.trim();
+
+    return { fullName, headline, country };
+  });
+
+  // Experience section - use more specific selector and batch operations
   const firstExperienceSelector = 'div[data-view-name=profile-component-entity]';
   console.log('start waiting for first experience');
   await waitForElement(page, firstExperienceSelector);
-  const firstExperienceItem = page.locator(firstExperienceSelector).first();
-  let latestCompanyName: string | undefined;
-  let latestCompanyUrl: string | undefined;
-  let title: string | undefined;
-  let description: string | undefined;
-  let duration: string | undefined;
+  
+  // Batch all experience data extraction in one evaluate call
+  const experienceData = await page.evaluate(() => {
+    const firstExperience = document.querySelector('a[data-field="experience_company_logo"]')?.closest('div[data-view-name="profile-component-entity"]') || document.querySelector('div[data-view-name=profile-component-entity]');
+    if (!firstExperience) return { latestCompanyName: undefined, latestCompanyUrl: undefined, title: undefined, duration: undefined };
 
-  console.log('Checking first experience is visible');
-  if (await firstExperienceItem.isVisible().catch(() => false)) {
-    const companyLink = firstExperienceItem.locator('a[href*="/company/"]').first();
+    const companyLink = firstExperience.querySelector('a[href*="/company/"]') as HTMLAnchorElement;
+    if (!companyLink) return { latestCompanyName: undefined, latestCompanyUrl: undefined, title: undefined, duration: undefined };
 
-    console.log('start getting more info');
-    latestCompanyUrl = (await companyLink.getAttribute('href').catch(() => null)) || undefined;
+    let latestCompanyUrl = companyLink.href;
     if (latestCompanyUrl && latestCompanyUrl.startsWith('/')) {
       latestCompanyUrl = 'https://www.linkedin.com' + latestCompanyUrl;
     }
-    const companyImage = companyLink.locator('img').first();
-    console.log('Extracting latestCompanyName');
-    latestCompanyName = (await companyImage.getAttribute('alt').catch(() => null)) || undefined;
 
-    console.log('Extracting title');
-    title = (await firstExperienceItem.locator('span[aria-hidden="true"]').first().textContent().catch(() => ''))?.trim() || undefined;
+    const companyImage = companyLink.querySelector('img') as HTMLImageElement;
+    const latestCompanyName = companyImage?.alt;
 
-    console.log('Extracting description');
-    // # Commented Because of making a lot of delay
-    // description = (await firstExperienceItem.locator('.pvs-entity__sub-components').first().textContent().catch(() => ''))?.trim() || undefined;
+    const title = firstExperience.querySelector('span[aria-hidden="true"]')?.textContent?.trim();
+    const duration = firstExperience.querySelector('.pvs-entity__caption-wrapper')?.textContent?.trim();
 
-    console.log('Extracting duration');
-    duration = (await firstExperienceItem.locator('.pvs-entity__caption-wrapper').first().textContent().catch(() => ''))?.trim() || undefined;
-    console.log('end of getting more info');
-  } else {
-    console.log('don\'t have more info');
-  }
+    return { latestCompanyName, latestCompanyUrl, title, duration };
+  });
 
-  return { fullName, headline, country, latestCompanyName, latestCompanyUrl, title, description, duration };
+
+  console.log('end of getting more info', experienceData);
+
+  return { 
+    ...profileData, 
+    ...experienceData,
+    description: undefined // Keep commented out as it was causing delays
+  };
 }
 
 export async function openCompanyAndExtract(page: Page, companyUrl: string): Promise<{
@@ -227,20 +220,23 @@ export async function openCompanyAndExtract(page: Page, companyUrl: string): Pro
     url = companyUrl.replace(/\/?$/, '/about/');
   }
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await delay(1000);
+  await delay(500); // Reduced from 1000ms
 
-  const title = (await page.locator('h1').first().textContent().catch(() => ''))?.trim() || undefined;
+  // Batch all company data extraction in one evaluate call
+  const companyData = await page.evaluate(() => {
+    const title = document.querySelector('h1')?.textContent?.trim();
+    
+    let description = document.querySelector('p.break-words.white-space-pre-wrap')?.textContent?.trim();
+    if (!description) {
+      description = document.querySelector('div.org-grid__core-rail--no-margin-left p')?.textContent?.trim();
+    }
 
-  let description = (await page.locator('p.break-words.white-space-pre-wrap').first().textContent().catch(() => ''))?.trim() || undefined;
-  if (!description) {
-    description = (await page.locator('div.org-grid__core-rail--no-margin-left p').first().textContent().catch(() => ''))?.trim() || undefined;
-  }
+    const sizeLabel = document.querySelector('dt:has-text("Company size") + dd')?.textContent?.trim();
 
-  let sizeLabel: string | undefined;
-  const factsText = await page.locator('dt:has-text("Company size") + dd').first().textContent().catch(() => '');
-  sizeLabel = factsText?.trim() || undefined;
+    return { title, description, sizeLabel };
+  });
 
-  return { title, description, sizeLabel };
+  return companyData;
 }
 
 export function mapSizeLabelToEnum(sizeLabel?: string): 'RANGE_1_10' | 'RANGE_11_50' | 'RANGE_51_200' | 'RANGE_201_500' | 'RANGE_501_1000' | 'RANGE_1001_5000' | 'RANGE_5001_10000' | 'RANGE_10001_PLUS' | 'UNKNOWN' {
@@ -258,7 +254,7 @@ export function mapSizeLabelToEnum(sizeLabel?: string): 'RANGE_1_10' | 'RANGE_11
 }
 
 // Helper function to process a single profile
-async function processProfile(context: any, prisma: PrismaClient, profileUrl: string): Promise<void> {
+async function processProfile(context: any, prisma: PrismaClient, profileUrl: string, role: string, country: string): Promise<void> {
   const profilePage = await context.newPage();
   try {
     const data = await openProfileAndExtract(profilePage, profileUrl);
@@ -268,7 +264,7 @@ async function processProfile(context: any, prisma: PrismaClient, profileUrl: st
     }
 
     // Upsert person
-    const person = await upsertPerson(prisma, profileUrl, data);
+    const person = await upsertPerson(prisma, profileUrl, data, role, country);
     
     // Handle company data if available
     if (data.latestCompanyName) {
@@ -278,26 +274,30 @@ async function processProfile(context: any, prisma: PrismaClient, profileUrl: st
       await createExperience(prisma, person.id, companyId, data);
     }
     
-    await delay(500);
+    await delay(200); // Reduced from 500ms
   } finally {
     await profilePage.close();
   }
 }
 
 // Helper function to upsert a person
-async function upsertPerson(prisma: PrismaClient, profileUrl: string, data: any) {
+async function upsertPerson(prisma: PrismaClient, profileUrl: string, data: any, role: string, country: string) {
   return await prisma.person.upsert({
     where: { profileUrl },
     update: {
       fullName: data.fullName,
       headline: data.headline,
       country: data.country,
+      searchingRole: role,
+      searchingCountry: country,
     },
     create: {
       fullName: data.fullName,
       headline: data.headline,
       country: data.country,
       profileUrl,
+      searchingRole: role,
+      searchingCountry: country,
     },
   });
 }
